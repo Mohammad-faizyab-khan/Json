@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<content>
+    <qradarversion>7.2.8.20170726191137</qradarversion>
+    <custom_function>
+	<id>3</id>
+	<username>admin</username>
+	<namespace>Filters</namespace>
+	<description>To check if the map of sets contains the specified key and the value</description>
+	<name>checkWithMapOfSets</name>
+	<parameter_types>string string string</parameter_types> // additional optional  Number Number Number
+	<return_type>Number</return_type>
+	<varargs>true</varargs>
+	<execute_function_name>checkWithMapOfSets</execute_function_name>
+	<script_engine>javascript</script_engine>
+	<script>
+
+		var QRadarConsoleIP = "192.168.0.40";
+		var headers = {'SEC': '74d586c6-66c7-46be-8b4c-7e633782eaaf'};
+			
+		// To check if the map of sets contains the specified key and the value, and the function will return one of the following values:
+		
+		//		1   -> the value exist in the set
+		//		0   -> the value doesn't exist in the set
+		//     -1   -> there isn't a key in the map.
+		
+		
+		// we need this function to exclude the case when the key doesn't exist at all in the map of sets.
+		// using this function we are checking if the value exist in a map of sets (case insensitive matching) for the value. but the key is still sensitive (because while inserting it will be inserted without a sensitivity control)
+		
+		
+		var ProcessMapOfSet;
+		var loadTime;
+		
+		function onInit(refDataName)
+		{
+		
+			loadTime = new Date();
+			
+			// to load the reference map of sets
+			
+			url = "https://"+QRadarConsoleIP+"/api/reference_data/map_of_sets/"+refDataName;
+			response = Utils.http.invokeHTTP("GET", url, 200, headers, null, null);
+			
+			ProcessMapOfSet = JSON.parse(response);
+			
+		}
+		
+		function checkWithMapOfSets(refDataName,refKey,value,refValueIsSeenSinceHrs, refDataCacheTimeOutInMins,ExceptTheAPIAddedValuesFromTheValueFirstSeenCondition)
+		{
+		
+			// param description:
+			// refValueIsSeenSinceHrs -> will be used as a threshold when we will calculate how old is the value in the ref data based on the value first seen date. (you will need it in scanarios where u don't want to include the today's added values)
+			// refValueIsSeenSinceHrs optional ---> refValueIsSeenSinceHrs = null or refValueIsSeenSinceHrs = -1
+			
+			// refDataCacheTimeOutInMins optional ---> refDataCacheTimeOutInMins = null. -> how many mins the data will be cached in memory.
+		
+			
+			// the following code to check the time difference for the cached data.
+			// if diffMins will be -1 -> then we will reload the cache.
+			
+			var diffMins = -1;
+			if(loadTime)
+			{
+				var currentDate = new Date();
+				var diffMs = (currentDate - loadTime);
+				var diffMins = Math.round(((diffMs % 86400000) % 3600000) / 60000);
+				
+				if(diffMins &lt; refDataCacheTimeOutInMins)
+				{
+					diffMins = -1;
+				}
+			
+			}
+			
+			// concurrency techniques credits for AQL Lookup content pack, I just added a way to control for how many mins the data will be cached in the memory, and to be able to recache it.
+			
+			if( Utils.concurrency.tryReadLock(refDataName+"READ",10000))
+			{
+				try
+				{
+					if(ProcessMapOfSet == null || (diffMins != null &amp;&amp; diffMins != -1))
+					{
+						if( Utils.concurrency.tryWriteLock(refDataName+"WRITE",10000) )
+						{
+							try
+							{
+								onInit(refDataName);
+							}
+							finally
+							{
+								Utils.concurrency.writeUnlock(refDataName+"WRITE");
+							}
+						}
+					}
+				}
+				finally
+				{
+					Utils.concurrency.readUnlock(refDataName+"READ");
+				}
+			}
+			
+			// the key is still case sensitive :: refKey.toLowerCase()
+			//  not implemented yet as while inserting into the mapofsets we need to take care of the sensitivity
+			
+			var refKeySet = ProcessMapOfSet.data[refKey];
+			
+			// to check if the key exist in the map of sets
+			if(!refKeySet)
+			{
+				return -1;
+			}
+			
+			// now the key exist, and we want to check how old is the value.
+			
+			if(!value) // in case if the user will pass null as a value
+			{
+				value = '';
+			}
+			
+			var currentDate = new Date();
+			
+			for( var i = 0; i &lt; refKeySet.length; i++ )
+			{
+				if(refKeySet[i].value.toLowerCase() == value.toLowerCase())
+				{
+					if(ExceptTheAPIAddedValuesFromTheValueFirstSeenCondition == 1 &amp;&amp; refKeySet[i].source == "reference data api")
+					{
+						return 1;
+					}
+					if(refValueIsSeenSinceHrs != null &amp;&amp; refValueIsSeenSinceHrs &gt; 0)
+					{
+						var valueFirstSeenDate = new Date(refKeySet[i].first_seen);
+						var timeDiffMs = Math.abs(currentDate.getTime() - valueFirstSeenDate.getTime());
+						var diffHrs = Math.floor((timeDiffMs % 86400000) / 3600000);
+						
+						// if the different doesn't match the defined threshold (to see how old is the value in hours) return 0
+						// example: don't consider any value that was added in the last 1 hour.
+						
+						if( diffHrs &lt; refValueIsSeenSinceHrs)
+						{
+							return 0;
+						}
+					}
+					return 1;
+				}
+			}
+			return 0;
+		}
+		</script>
+	</custom_function>
+</content>

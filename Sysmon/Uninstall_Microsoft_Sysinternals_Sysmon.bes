@@ -1,0 +1,59 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<BES xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' xsi:noNamespaceSchemaLocation='BES.xsd'>
+	<Task>
+        <Title>Uninstall Microsoft Sysinternals Sysmon</Title>
+        <Description>This Task will uninstall MS Sysinternals Sysmon. </Description>        
+        <Relevance>(name of it starts with "Win7" OR name of it starts with "Win8" OR name of it starts with "Win10" OR name of it starts with "Win2008R2" OR name of it starts with "Win2012" OR name of it starts with "Win2016" ) of operating system</Relevance>
+        <Relevance>exists service "sysmon"</Relevance>
+        <DownloadSize>1271314</DownloadSize> 
+        <Source>IBM</Source> 
+        <SourceReleaseDate>2017-09-01</SourceReleaseDate>
+                <MIMEField>
+                    <Name>x-fixlet-modification-time</Name>
+
+
+                    <Value>Tue, 12 Sep 2017 21:58:38 +0000</Value>
+                </MIMEField>
+
+        <MIMEField>
+            <Name>bigfixme-added-time</Name>
+            <Value>Tue, 12 Sep 2017 17:49:33 GMT</Value>
+        </MIMEField>
+        <MIMEField>
+            <Name>bigfixme-modification-time</Name>
+            <Value>Tue, 12 Sep 2017 17:49:33 GMT</Value>
+        </MIMEField>
+        <MIMEField>
+            <Name>bigfixme-keywords</Name>
+            <Value>uninstall microsoft ms sysmon</Value>
+        </MIMEField>
+        <MIMEField>
+            <Name>bigfixme-ID</Name>
+            <Value>24634</Value>
+        </MIMEField>
+
+
+        <Domain>BESC</Domain> 
+		<DefaultAction ID="Action1">
+            <Description>
+                <PreLink>Click </PreLink>
+                <Link>here</Link>
+                <PostLink> to deploy this action.</PostLink>
+            </Description>
+            <ActionScript MIMEType="application/x-Fixlet-Windows-Shell"><![CDATA[// Uninstall Sysmon service
+waithidden "{windows folder as string & "\sysmon.exe"}" -u]]></ActionScript>
+		</DefaultAction>
+
+		<Action ID="Action2">
+
+			<Description>
+				<PreLink>Click </PreLink>
+				<Link>here</Link>
+				<PostLink> to review this task in the bigfix.me Content Database.</PostLink>
+			</Description>
+			<ActionScript MIMEType="text/x-uri">https://bigfix.me/cdb/fixlet/24634</ActionScript>
+		</Action>
+
+
+	</Task>
+</BES>

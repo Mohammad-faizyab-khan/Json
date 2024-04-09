@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<content>
+    <qradarversion>7.2.8.20170726191137</qradarversion>
+    <custom_function>
+	<id>1</id>
+	<username>admin</username>
+	<namespace>Filters</namespace>
+	<description>To check if the process hash is whitelisted when the input is the process name</description>
+	<name>IsItWhiteListedProcessHash</name>
+	<parameter_types>string</parameter_types> // additional optional argument as a Number
+	<return_type>Boolean</return_type>
+	<varargs>true</varargs>
+	<init_function_name>onInit</init_function_name>
+	<execute_function_name>IsItWhiteListedProcessHash</execute_function_name>
+	<script_engine>javascript</script_engine>
+	<script>
+			
+			var QRadarConsoleIP = "192.168.0.40";
+			var headers = {'SEC': '74d586c6-66c7-46be-8b4c-7e633782eaaf'};
+			
+			var refSetName = "WhitelistedHashes";
+			var refMapOfSetName = "ProcessNametoHash";
+			
+			var WhiteListedProcessHashSet;
+			var ProcessMapOfSet;
+			
+			var lockName = ProcessMapOfSet+ProcessMapOfSet;
+			
+			var loadTime;
+			
+			function onInit()
+			{
+			
+				loadTime = new Date();
+				
+				
+				// to load the whitelisted hashes
+				
+				WhiteListedProcessHashSet = Utils.concurrency.createConcurrentSet();
+				
+				var url = "https://"+QRadarConsoleIP+"/api/reference_data/sets/"+refSetName;
+				
+				var response = Utils.http.invokeHTTP("GET", url, 200, headers, null, null);				
+				var jsonResponse = JSON.parse(response);
+				
+				for( var i = 0; i &lt; jsonResponse.data.length; i++ )
+				{
+					WhiteListedProcessHashSet.add(jsonResponse.data[i].value.toLowerCase());
+				}
+				
+				
+				// to load the reference map of sets which map the process name to the set of process hashes
+				
+				// rename to ProcessNameMaptoHashSet
+				url = "https://"+QRadarConsoleIP+"/api/reference_data/map_of_sets/"+refMapOfSetName;
+				response = Utils.http.invokeHTTP("GET", url, 200, headers, null, null);
+				
+				ProcessMapOfSet = JSON.parse(response);
+				
+			}
+			
+			function IsItWhiteListedProcessHash(ProcessName,refDataCacheTimeOutInMins)
+			{
+				
+				// to control for how many mins the ref data will be cached.
+				
+				var diffMins = -1;
+			
+				if(loadTime)
+				{
+					var currentDate = new Date();
+					var diffMs = (currentDate - loadTime);
+					//var diffHrs = Math.floor((diffMs % 86400000) / 3600000); // hours
+					var diffMins = Math.round(((diffMs % 86400000) % 3600000) / 60000); // minutes
+					
+					if(diffMins &lt; refDataCacheTimeOutInMins)
+					{
+						diffMins = -1;
+					}
+				
+				}
+				
+				// concurrency techniques credits for AQL Lookup content pack, I just added a way to control for how many mins the data will be cached in the memory, and to be able to recache it.
+				
+				if( Utils.concurrency.tryReadLock(lockName+"READ",10000))
+				{
+					try
+					{
+						if(ProcessMapOfSet == null || diffMins != -1)
+						{
+							if( Utils.concurrency.tryWriteLock(lockName+"WRITE",10000) )
+							{
+								try
+								{
+									onInit();
+								}
+								finally
+								{
+									Utils.concurrency.writeUnlock(lockName+"WRITE");
+								}
+							}
+						}
+					}
+					finally
+					{
+						Utils.concurrency.readUnlock(lockName+"READ");
+					}
+				}
+			
+			
+				// to get the hashes for the Process Name
+				// if at least one process hash is not whitelisted then return false.
+				
+				var processHashes = ProcessMapOfSet.data[ProcessName];
+				
+				// we will need to add/handle an exception if the process name doesn't exist
+				
+				for( var i = 0; i &lt; processHashes.length; i++ )
+				{
+					if(!WhiteListedProcessHashSet.contains(processHashes[i].value.toLowerCase()))
+					{
+						return false;
+					}
+				}
+				return true;
+			}
+			
+		</script>
+	</custom_function>
+</content>
